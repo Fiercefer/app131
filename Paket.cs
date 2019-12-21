@@ -5,7 +5,6 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO.Ports;
 using System.IO;
-using System.Security.Permissions;
 using System.Threading;
 using System.Windows.Forms;
 
