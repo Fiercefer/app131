@@ -41,16 +41,16 @@ namespace ConsoleApp13
                     if (port.BytesToRead > 0)
                     {
                         res = packet.ReciveData(port, 100);
-                        int typeFile = packet.DataTypeSearch();//поиск типа данных с пакете
+                        int typeFile = packet.DataTypeSearch(res.Values);//поиск типа данных с пакете
                         if (typeFile == 4)//если тип пакетов 4(file)
                         {
                             FilesSave = true;
                             Run = true;
-                            SaveFile(packet, typeFile);//сохранение файла
+                            SaveFile(res, typeFile);//сохранение файла
                         }
                         if (typeFile == 6)
                         {
-                            string code = packet.ConvertPaketsInString();
+                            string code = packet.ConvertPaketsInString(res.Values);
                             string[] arr = code.Split('|');
                             if (code == "Command.SendFile")
                             {
@@ -73,7 +73,7 @@ namespace ConsoleApp13
                         {
                             if (res.ErrorCode == 0 && typeFile == 3)
                             {
-                                string mes = packet.ConvertPaketsInString();//перевод пакета в строку
+                                string mes = packet.ConvertPaketsInString(res.Values);//перевод пакета в строку
                                 Console.WriteLine($"Принятое сообщение: {mes}");
                             }
                         }
@@ -184,10 +184,19 @@ namespace ConsoleApp13
                     }
                     ok = true;
                 }
-                if (sub == "СLEARRECIVESTATUS{")
+                if (sub == "СLEARRECIVESTATUS")
                 {
                     SendOpp = true;
                     Console.WriteLine("Теперь вы снова можете отправлять файлы");
+                    ok = true;
+                }
+                if (sub == "TEST")
+                {
+                    ErrorPacket pak = new ErrorPacket();
+                    pak = pak.Packet.PreparationData("C:\\база\\image.png",TypesContent.File,1,2);
+                    pak = pak.Packet.SaveDataInFile("C:\\база\\МачкаПасла.png", pak.Values);
+                    ok = true;
+                    Console.WriteLine("МачкаПасла.png");
                 }
                 if (sub == "SENDFILE" && !FilesSave)
                 {
@@ -293,16 +302,15 @@ namespace ConsoleApp13
         /// <param name="debug">сообщать ли о том что сообщение отправлено</param>
         private void SendMessage(string message, SerialPort port, bool debug, TypesContent type)
         {
-            ErrorPacket error = new ErrorPacket();
             string[] arr = message.Split('/');//отделение сообщения от комманды
             var packet = new Packet();
             var res = packet.PreparationData(arr[1], type, 3, 4);//конвертация строки в пакеты
             if (res.ErrorCode == 0)
             {
-                error = packet.SendData(port, 10000);
+                res = packet.SendData(port, 10000, res);
                 if (debug)
                 {
-                    if (error.ErrorCode == 0)
+                    if (res.ErrorCode == 0)
                     {
                         Console.WriteLine("Сообщение отправлено");
                     }
@@ -324,7 +332,7 @@ namespace ConsoleApp13
         /// <param name="port">Порт для отправки</param>
         private void SendFile(string message, SerialPort port)
         {
-            ErrorPacket error = new ErrorPacket();
+            ErrorPacket res = new ErrorPacket();
             try
             {
                 string[] arr;
@@ -338,11 +346,11 @@ namespace ConsoleApp13
                     arr = way.Split('\\');
                     SendMessage($"SEND/Command.SendFileName|{arr[arr.Length - 1]}", port, false, TypesContent.Command);
                     SendMessage("SEND/Command.SendFile", port, false, TypesContent.Command);
-                    var res = packet.PreparationData(way, TypesContent.File, 3, 4);//конвертация файла в пакеты
+                    res = packet.PreparationData(way, TypesContent.File, 3, 4);//конвертация файла в пакеты
                     if (res.ErrorCode == 0)
                     {
-                        error = packet.SendData(port, 10000);
-                        if (error.ErrorCode == 0)
+                        res = packet.SendData(port, 100000000, res);
+                        if (res.ErrorCode == 0)
                         {
                             Console.WriteLine("Файл отправлен");
                         }
@@ -367,13 +375,12 @@ namespace ConsoleApp13
         /// </summary>
         /// <param name="packet">Массив пакетов</param>
         /// <param name="type">Тип данных</param>
-        private void SaveFile(Packet packet, int type)
+        private void SaveFile(ErrorPacket packet, int type)
         {
             bool first = true;
             bool end = true;
             while (end)
             {
-                ErrorPacket error = new ErrorPacket();
                 SaveWay = null;
                 FilesSave = true;
                 if (first)
@@ -396,6 +403,7 @@ namespace ConsoleApp13
                         SaveWay = null;
                         Console.WriteLine("Введите имя файла и путь");
                         while (SaveWay == null) { }//ожидание ввода пути сохранения
+                        SaveWay = SaveWay.Replace("\\\\", "\\");
                         string[] filedirectory = SaveWay.Split('\\');//определение пути для сохраняемого файла
                         string fileDir = "";
                         for (int i = 0; i < filedirectory.Length - 1; i++)
@@ -404,7 +412,7 @@ namespace ConsoleApp13
                             fileDir += "\\";
                         }
                         Directory.CreateDirectory(fileDir);//создание дирректории для файла
-                        error = packet.SaveDataInFile(SaveWay);//сохранение данных из пакета в фаил
+                        packet = packet.Packet.SaveDataInFile(SaveWay, packet.Values);
                         if (File.Exists(SaveWay))
                         {
                             Console.WriteLine("Фаил сохранен");
@@ -415,7 +423,7 @@ namespace ConsoleApp13
                         else
                         {
                             Console.WriteLine("Фаил не сохранен");
-                            ExceptionDescription = error.ErrorDescription;
+                            ExceptionDescription = packet.ErrorDescription;
                             Console.WriteLine(ExceptionDescription);
                             Console.WriteLine("Повторить попытку [1)да] [иное)нет] ");
                             SaveWay = "";
@@ -430,16 +438,16 @@ namespace ConsoleApp13
                     }
                     SendOpp = true;
                 }
-                catch
+                    catch (Exception err) { }
                 {
-                    Console.WriteLine("Некорректный путь, фаил не сохранен");
+                    Console.WriteLine(err.Message);
                     Console.WriteLine("Повторить попытку [1)да] [иное)нет] ");
                     SaveWay = "";
                     while (SaveWay == "") { }
                     if (SaveWay != "1") { end = false; SendMessage($"SEND/[Фаил {ReciveFileName} не был принят]", port, false, TypesContent.Message); }
                 }
-            }
-            ReciveFileName = null;
+        }
+        ReciveFileName = null;
             FilesSave = false;
         }
     }

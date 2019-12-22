@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO.Ports;
 using System.IO;
+using System.Security.Permissions;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -15,23 +16,37 @@ namespace ConsoleApp13
     {
         public int ErrorCode;
         public string ErrorDescription;
-        public Packet Packet;
+        public Packet Packet = new Packet();
+        public Values Values = new Values();
     }
 
     public class Packet
     {
-        public byte[,] DataRes; //индекс 1-номер пакета, индекс 2-номер байта
-        private string Name; //2 символа 
-        private int PocCount; //4 байта
-        private int PocNum; //4 байта
-        private ushort LengthData;//2 байта
-        private int DataType; //4 байта
-        private int SenderName; //4 байта
-        private int ReciverName; //4 байта
-        private byte[] Data;//до 600 байт
-        private ushort CRS; //2 байта
-        private byte[] paket;
-        private byte[] CRSpaket;
+        //public byte[,] DataRes; //индекс 1-номер пакета, индекс 2-номер байта
+        //private string Name; //2 символа 
+        //private int PocCount; //4 байта
+        //private int PocNum; //4 байта
+        //private ushort LengthData;//2 байта
+        //private int DataType; //4 байта
+        //private int SenderName; //4 байта
+        //private int ReciverName; //4 байта
+        //private byte[] Data;//до 600 байт
+        //private ushort CRS; //2 байта
+        //private byte[] paket;
+        //private byte[] CRSpaket;
+
+        private const byte PointPocCount = 2;
+        private const byte PointPocNum = 6;
+        private const byte PointLengthData = 10;
+        private const byte PointDataType = 12;
+        private const byte PointSenderName = 16;
+        private const byte PointReciverName = 20;
+        private const byte PointData = 24;
+        private const byte SizeEmptyPak = 26;
+        private const byte SizeCRSpak = 27;
+        private const ushort MaxSizeData = 600;
+        private const ushort MaxSizePacket = 626;
+        private const byte CommandByte = 25;
 
         /// <summary>
         /// Определение количества пакетов в массиве пакетов
@@ -41,9 +56,9 @@ namespace ConsoleApp13
         private int PocNumDataSearch(byte[,] DataRes)
         {
             byte[] fourArr = new byte[4];
-            for (int s = 0; s < 4; s++) { fourArr[s] = DataRes[0, s + 6]; }
-            PocNum = BitConverter.ToInt32(fourArr, 0);
-            return PocNum;
+            for (int s = 0; s < 4; s++) { fourArr[s] = DataRes[0, s + PointPocNum]; }
+            int pocNum = BitConverter.ToInt32(fourArr, 0);
+            return pocNum;
         }
 
         /// <summary>
@@ -55,9 +70,9 @@ namespace ConsoleApp13
         private ushort LengthDataSearch(byte[,] DataRes, int num)//поиск длинны даты---------------------------------
         {
             byte[] twoArr = new byte[2];
-            for (int j = 0; j < 2; j++) { twoArr[j] = DataRes[num, j + 10]; }
-            LengthData = BitConverter.ToUInt16(twoArr, 0);
-            return LengthData;
+            for (int j = 0; j < 2; j++) { twoArr[j] = DataRes[num, j + PointLengthData] ; }
+            ushort lengthData = BitConverter.ToUInt16(twoArr, 0);
+            return lengthData;
         }
         /// <summary>
         /// Подсчет контрольной суммы
@@ -99,28 +114,28 @@ namespace ConsoleApp13
         /// <param name="LengthData">Объем данных</param>
         /// <param name="dataType">Тип данных</param>
         /// <param name="Data">Данные</param>
-        private void ConvertDataInPaket(string Name, int PocCount, int PocNum, ushort LengthData, int dataType, int senderName, int reciverName, byte[] Data)//конвертация данных в массив байтов------------------------------------------
+        private Values ConvertDataInPaket(Values val)//конвертация данных в массив байтов------------------------------------------
         {
-            ushort crs;
-            byte[] arrName = Encoding.UTF8.GetBytes(Name);
-            byte[] arrPocCount = BitConverter.GetBytes(PocCount);
-            byte[] arrPocNum = BitConverter.GetBytes(PocNum);
-            byte[] arrLenghtData = BitConverter.GetBytes(LengthData);
-            byte[] arrDataType = BitConverter.GetBytes(dataType);
-            byte[] arrSenderName = BitConverter.GetBytes(senderName);
-            byte[] arrReciverName = BitConverter.GetBytes(reciverName);
-            crs = SchetCRS(arrName, arrPocCount, arrPocNum, arrLenghtData, arrDataType, arrSenderName, arrReciverName, Data);
-            byte[] arrCRS = BitConverter.GetBytes(crs);
-            paket = new byte[arrName.Length + arrPocCount.Length + arrPocNum.Length + arrLenghtData.Length + arrDataType.Length + arrCRS.Length + Data.Length+ arrSenderName.Length+arrReciverName.Length];
-            arrName.CopyTo(paket, 0);
-            arrPocCount.CopyTo(paket, 2);
-            arrPocNum.CopyTo(paket, 6);
-            arrLenghtData.CopyTo(paket, 10);
-            arrDataType.CopyTo(paket, 12);
-            arrSenderName.CopyTo(paket,16);
-            arrReciverName.CopyTo(paket,20);
-            Data.CopyTo(paket, 24);
-            arrCRS.CopyTo(paket, Data.Length + 24);
+            byte[] arrName = Encoding.UTF8.GetBytes(val.Name);
+            byte[] arrPocCount = BitConverter.GetBytes(val.PocCount);
+            byte[] arrPocNum = BitConverter.GetBytes(val.PocNum);
+            byte[] arrLenghtData = BitConverter.GetBytes(val.LengthData);
+            byte[] arrDataType = BitConverter.GetBytes(val.DataType);
+            byte[] arrSenderName = BitConverter.GetBytes(val.SenderName);
+            byte[] arrReciverName = BitConverter.GetBytes(val.ReciverName);
+            val.CRS = SchetCRS(arrName, arrPocCount, arrPocNum, arrLenghtData, arrDataType, arrSenderName, arrReciverName, val.Data);
+            byte[] arrCRS = BitConverter.GetBytes(val.CRS);
+            val.paket = new byte[arrName.Length + arrPocCount.Length + arrPocNum.Length + arrLenghtData.Length + arrDataType.Length + arrCRS.Length + val.Data.Length+ arrSenderName.Length+arrReciverName.Length];
+            arrName.CopyTo(val.paket, 0);
+            arrPocCount.CopyTo(val.paket, PointPocCount);
+            arrPocNum.CopyTo(val.paket, PointPocNum);
+            arrLenghtData.CopyTo(val.paket, PointLengthData);
+            arrDataType.CopyTo(val.paket, PointDataType);
+            arrSenderName.CopyTo(val.paket,PointSenderName);
+            arrReciverName.CopyTo(val.paket,PointReciverName);
+            val.Data.CopyTo(val.paket, PointData);
+            arrCRS.CopyTo(val.paket, val.Data.Length + PointData);
+            return val;
         }
 
         /// <summary>
@@ -159,43 +174,44 @@ namespace ConsoleApp13
         /// Разборка массива с пакетом на данные
         /// </summary>
         /// <param name="readbyte">Массив с пакетом</param>
-        private void DeConvertDataOutPaket(byte[] readbyte)//деконвертация данных из массива байтов-------------------------------------------------,----------------------------------------
+        private Values DeConvertDataOutPaket(byte[] readbyte)//деконвертация данных из массива байтов-------------------------------------------------,----------------------------------------
         {
+            Values val = new Values();
             byte[] fourArr = new byte[4];
             byte[] twoArr = new byte[2];
 
             for (int i = 0; i < 2; i++) { twoArr[i] = readbyte[i]; }
-            Name = Encoding.UTF8.GetString(twoArr);
-            string pakName = Name;
+            val.Name = Encoding.UTF8.GetString(twoArr);
 
-            for (int i = 0; i < 4; i++) { fourArr[i] = readbyte[i + 2]; }
-            PocCount = BitConverter.ToInt32(fourArr, 0);
+            for (int i = 0; i < 4; i++) { fourArr[i] = readbyte[i + PointPocCount]; }
+            val.PocCount = BitConverter.ToInt32(fourArr, 0);
 
-            for (int i = 0; i < 4; i++) { fourArr[i] = readbyte[i + 6]; }
-            PocNum = BitConverter.ToInt32(fourArr, 0);
+            for (int i = 0; i < 4; i++) { fourArr[i] = readbyte[i + PointPocNum]; }
+            val.PocNum = BitConverter.ToInt32(fourArr, 0);
 
-            for (int i = 0; i < 2; i++) { twoArr[i] = readbyte[i + 10]; }
-            LengthData = BitConverter.ToUInt16(twoArr, 0);
+            for (int i = 0; i < 2; i++) { twoArr[i] = readbyte[i + PointLengthData]; }
+            val.LengthData = BitConverter.ToUInt16(twoArr, 0);
 
-            for (int i = 0; i < 4; i++) { fourArr[i] = readbyte[i + 12]; }
-            DataType = BitConverter.ToInt32(fourArr, 0);
+            for (int i = 0; i < 4; i++) { fourArr[i] = readbyte[i + PointDataType]; }
+            val.DataType = BitConverter.ToInt32(fourArr, 0);
 
-            for (int i = 0; i < 4; i++) { fourArr[i] = readbyte[i + 16]; }
-            SenderName = BitConverter.ToInt32(fourArr, 0);
+            for (int i = 0; i < 4; i++) { fourArr[i] = readbyte[i + PointSenderName]; }
+            val.SenderName = BitConverter.ToInt32(fourArr, 0);
 
-            for (int i = 0; i < 4; i++) { fourArr[i] = readbyte[i + 20]; }
-            ReciverName = BitConverter.ToInt32(fourArr, 0);
+            for (int i = 0; i < 4; i++) { fourArr[i] = readbyte[i + PointReciverName]; }
+            val.ReciverName = BitConverter.ToInt32(fourArr, 0);
 
-            int Numdata = 24;
-            Data = new byte[LengthData];
-            for (int i = 0; i < LengthData; i++)
+            int Numdata = PointData;
+            val.Data = new byte[val.LengthData];
+            for (int i = 0; i < val.LengthData; i++)
             {
-                Data[i] = readbyte[Numdata];
+                val.Data[i] = readbyte[Numdata];
                 Numdata++;
             }
 
             for (int i = 0; i < 2; i++) { twoArr[i] = readbyte[Numdata + i]; }
-            CRS = BitConverter.ToUInt16(twoArr, 0);
+            val.CRS = BitConverter.ToUInt16(twoArr, 0);
+            return val;
         }
 
         /// <summary>
@@ -204,19 +220,20 @@ namespace ConsoleApp13
         /// <param name="schetPak">Номер пакета</param>
         /// <param name="lengthData">Объем данных</param>
         /// <param name="pakets">Массив из которого будут переписаны данные</param>
-        private void SaveDataInMatrix(int schetPak, ushort lengthData, byte[] pakets)//сохранение массива на указанную строку------------------------------------------------------------------
+        private Values SaveDataInMatrix(Values val, byte[] paket, int PocCount)//сохранение массива на указанную строку------------------------------------------------------------------
         {
-            for (int i = 0; i < lengthData + 26; i++)
+            for (int i = 0; i < val.LengthData + SizeEmptyPak; i++)
             {
-                DataRes[schetPak, i] = pakets[i];
+                val.DataRes[PocCount, i] = paket[i];
             }
+            return val;
         }
         /// <summary>
         /// Сохранение массива пакетов в фаил
         /// </summary>
         /// <param name="fileName">Путь к файлу</param>
         /// <returns>Код ошибки и её описание</returns>
-        public ErrorPacket SaveDataInFile(string fileName)//сохранение в фаил===============================
+        public ErrorPacket SaveDataInFile(string fileName, Values val)//сохранение в фаил===============================
         {
             ErrorPacket err = new ErrorPacket();
             try
@@ -224,19 +241,20 @@ namespace ConsoleApp13
                 err.ErrorCode = 0;
                 err.ErrorDescription = "";
                 int AllDataL = 0;
-                int PocN = PocNumDataSearch(DataRes);
+                int PocN = PocNumDataSearch(val.DataRes);
                 int schetByte = 0;
                 for (int i = 0; i < PocN; i++)
                 {
-                    AllDataL += LengthDataSearch(DataRes, i);
+                    int length = LengthDataSearch(val.DataRes, i);
+                    AllDataL += length;
                 }
                 byte[] saveArray = new byte[AllDataL];
                 for (int i = 0; i < PocN; i++)
                 {
-                    int DataL = LengthDataSearch(DataRes, i);
-                    for (int j = 24; j < DataL + 24; j++)
+                    int DataL = LengthDataSearch(val.DataRes, i);
+                    for (int j = 24; j < DataL + PointData; j++)
                     {
-                        saveArray[schetByte] = DataRes[i, j];
+                        saveArray[schetByte] = val.DataRes[i, j];
                         schetByte++;
                     }
                 }
@@ -259,9 +277,11 @@ namespace ConsoleApp13
         /// <returns>Код ошибки и её описание</returns>
         public ErrorPacket PreparationData(string stroka, TypesContent type, int SenderName, int ReciverName)//Подготовка строки к разрезке========================================
         {
-            ErrorPacket pockets = new ErrorPacket();
-            pockets.ErrorCode = 0;
-            pockets.ErrorDescription = null;
+            ErrorPacket pockets = new ErrorPacket
+            {
+                ErrorCode = 0,
+                ErrorDescription = null
+            };
             if (type != TypesContent.File)
             {
                 byte[] byteArray = Encoding.UTF8.GetBytes(stroka);
@@ -290,10 +310,10 @@ namespace ConsoleApp13
         /// <returns>Код ошибки и её описание</returns>
         public ErrorPacket PreparationData(byte[] byteArray, TypesContent type, int senName, int recName)//Разрезка массива байтов на пакеты=====================================================================================
         {
-            SenderName = senName;
-            ReciverName = recName;
-            DataType = (int)type;
             ErrorPacket pockets = new ErrorPacket();
+            pockets.Values.SenderName = senName;
+            pockets.Values.ReciverName = recName;
+            pockets.Values.DataType = (int)type;
             try
             {
                 pockets.ErrorCode = 0;
@@ -304,62 +324,55 @@ namespace ConsoleApp13
                 int schetBytes = 0;
                 int ostatok = 0;
                 int schetPak = 0;
-                if (byteArray.Length < 600)         //
+                if (byteArray.Length < MaxSizeData)         //
                 {                                   //
                     ostatok = 1;                    //
                 }                                   // определение наличие пакета,, объем которого меньше 600
-                if (byteArray.Length % 600 > 0)     //
+                if (byteArray.Length % MaxSizeData > 0)     //
                 {                                   //
                     ostatok = 1;                    //
                 }
-                int pacKolvo = byteArray.Length / 600; //определение количества пакетов объемом в 600 байт
-                PocNum = pacKolvo + ostatok;//подсчет количества пакетов кратных 600 и пакета не кратного 600
-                DataRes = new byte[PocNum, 626];
+                int pacKolvo = byteArray.Length / MaxSizeData; //определение количества пакетов объемом в 600 байт
+                pockets.Values.PocNum = pacKolvo + ostatok;//подсчет количества пакетов кратных 600 и пакета не кратного 600
+                pockets.Values.DataRes = new byte[pockets.Values.PocNum, MaxSizePacket];
 
-                if (byteArray.Length > 600)//начало отправки пакетов с данными, объем которых = 600
+                if (byteArray.Length > MaxSizeData)//начало отправки пакетов с данными, объем которых = 600
                 {
                     for (int schet = 0; schet < pacKolvo; schet++)
                     {
-                        Name = nameRand;
-                        PocCount = schetPak;
+                        pockets.Values.Name = nameRand;
+                        pockets.Values.PocCount = schetPak;
 
-                        LengthData = 600;
-                        Data = new byte[LengthData];
-                        for (int i = 0; i < 600; i++)
+                        pockets.Values.LengthData = MaxSizeData;
+                        pockets.Values.Data = new byte[pockets.Values.LengthData];
+                        for (int i = 0; i < MaxSizeData; i++)
                         {
-                            Data[i] = byteArray[schetBytes];
+                            pockets.Values.Data[i] = byteArray[schetBytes];
                             schetBytes++;
                         }
-                        ConvertDataInPaket(Name, PocCount, PocNum, LengthData, DataType, SenderName, ReciverName, Data);
-                        SaveDataInMatrix(schetPak, LengthData, paket);
+                        pockets.Values = ConvertDataInPaket(pockets.Values);
+                        pockets.Values = SaveDataInMatrix(pockets.Values, pockets.Values.paket,schetPak);
                         schetPak++;
                     }
                 }
-                if (ostatok == 1 || byteArray.Length < 600)//Отправка пакета объемом <600 если таковой имеется
+                if (ostatok == 1 || byteArray.Length < MaxSizeData)//Отправка пакета объемом <600 если таковой имеется
                 {
-                    Name = nameRand;
-                    PocCount = schetPak;
-                    PocNum = pacKolvo + ostatok;
-                    LengthData = Convert.ToUInt16(byteArray.Length % 600);
-                    Data = new byte[LengthData];
-                    for (int i = 0; i < byteArray.Length % 600; i++)
+                    pockets.Values.Name = nameRand;
+                    pockets.Values.PocCount = schetPak;
+                    pockets.Values.PocNum = pacKolvo + ostatok;
+                    pockets.Values.LengthData = Convert.ToUInt16(byteArray.Length % MaxSizeData);
+                    pockets.Values.Data = new byte[pockets.Values.LengthData];
+                    for (int i = 0; i < byteArray.Length % MaxSizeData; i++)
                     {
-                        Data[i] = byteArray[schetBytes];
+                        pockets.Values.Data[i] = byteArray[schetBytes];
                         schetBytes++;
                     }
-                    ConvertDataInPaket(Name, PocCount, PocNum, LengthData, DataType, SenderName, ReciverName, Data);//сборка пакета
-                    SaveDataInMatrix(schetPak, LengthData, paket);//перепись пакета в массив пакетов
-                }
-                for (int i = 0; i < PocNum; i++)
-                {
-                    for (int j = 0; j > LengthData; j++)
-                    {
-                        pockets.Packet.DataRes[i, j] = DataRes[i, j];
-                    }
+                    pockets.Values = ConvertDataInPaket(pockets.Values);
+                    pockets.Values = SaveDataInMatrix(pockets.Values, pockets.Values.paket,schetPak);
                 }
                 return pockets;
             }
-            catch(Exception err)
+            catch (Exception err)
             {
 
                 pockets.ErrorCode = err.HResult;
@@ -368,42 +381,43 @@ namespace ConsoleApp13
             }
 
         }
+
         /// <summary>
         /// Отправка пакетов с данными
         /// </summary>
         /// <param name="port">Порт, на который отправляется массив пакетов</param>
         /// <param name="ReadTimeOut">время ожидания</param>
         /// <returns>0 если отправка прошла успешно, 1 если отправка провалена</returns>
-        public ErrorPacket SendData(SerialPort port, int ReadTimeOut)//отправка подготовленных пакетов==================================================================================================
+        public ErrorPacket SendData(SerialPort port, int ReadTimeOut, ErrorPacket pockets)//отправка подготовленных пакетов==================================================================================================
         {
-            ErrorPacket pockets = new ErrorPacket();
             try
             {
                 pockets.ErrorCode = 0;
                 pockets.ErrorDescription = "";
                 port.ReadTimeout = ReadTimeOut;
                 port.WriteTimeout = ReadTimeOut;
-                for (int i = 0; i < PocNumDataSearch(DataRes); i++)//начало отправки пакетов
+                for (int i = 0; i < PocNumDataSearch(pockets.Values.DataRes); i++)//начало отправки пакетов
                 {
-                    LengthDataSearch(DataRes, i);  //определение объема данных в пакете
-                    byte[] ArrOnSand = new byte[LengthData + 26];
-                    for (int j = 0; j < LengthData + 26; j++)
+                    pockets.Values.LengthData = LengthDataSearch(pockets.Values.DataRes, i);  //определение объема данных в пакете
+                    byte[] ArrOnSand = new byte[pockets.Values.LengthData + SizeEmptyPak];
+                    for (int j = 0; j < pockets.Values.LengthData + SizeEmptyPak; j++)
                     {
-                        ArrOnSand[j] = DataRes[i, j]; //перепись пакета в отправляемый массив
+                        ArrOnSand[j] = pockets.Values.DataRes[i, j]; //перепись пакета в отправляемый массив
                     }
-                    port.Write(ArrOnSand, 0, LengthData + 26); //отправка пакетов
-                    CRSpaket = new byte[27];
+                    port.Write(ArrOnSand, 0, pockets.Values.LengthData + SizeEmptyPak); //отправка пакетов
+                    pockets.Values.CRSpaket = new byte[SizeCRSpak];
                     bool crsNameCheck = false;
-                    CRSpaket = new byte[27];
+                    pockets.Values.CRSpaket = new byte[SizeCRSpak];
+                    crsNameCheck = false;
                     while (!crsNameCheck)
                     {
-                        port.Read(CRSpaket, 0, 27);
-                        string nameCRS = CRSNameSearch(CRSpaket);
-                        if (nameCRS == Name)
+                        port.Read(pockets.Values.CRSpaket, 0, SizeCRSpak);
+                        string nameCRS = CRSNameSearch(pockets.Values.CRSpaket);
+                        if (nameCRS == pockets.Values.Name)
                         {
                             crsNameCheck = true;
                             
-                            if (CRSpaket[25] == 1)
+                            if (pockets.Values.CRSpaket[25] == 1)
                             {
                                 i--;
                             }
@@ -458,22 +472,22 @@ namespace ConsoleApp13
                     }
                     pok = new byte[sizemas];
                     port.Read(pok, 0, sizemas);
-                    DeConvertDataOutPaket(pok);//разборка пакетов на данные
-                    namePaks = Name; //сохранение имени принятого пакета для дальнейшей проверки
-                    colvoPacs = PocNum;
-                    DataRes = new byte[PocNum, 626];
-                    checkONCRS = CheckCRS(Name, PocCount, PocNum, LengthData, DataType, SenderName,ReciverName, Data, CRS);//проверка контрольной суммы
+                    pockets.Values=DeConvertDataOutPaket(pok);//разборка пакетов на данные
+                    namePaks = pockets.Values.Name; //сохранение имени принятого пакета для дальнейшей проверки
+                    colvoPacs = pockets.Values.PocNum;
+                    pockets.Values.DataRes = new byte[pockets.Values.PocNum, MaxSizePacket];
+                    checkONCRS = CheckCRS(pockets.Values.Name, pockets.Values.PocCount, pockets.Values.PocNum, pockets.Values.LengthData, pockets.Values.DataType, pockets.Values.SenderName, pockets.Values.ReciverName, pockets.Values.Data, pockets.Values.CRS);//проверка контрольной суммы
                     if (checkONCRS)
                     {
-                        AssemblyCRS(0, SenderName, ReciverName);
-                        port.Write(CRSpaket, 0, 27);             //подтверждение корректного получения пакетов
+                        pockets.Values = AssemblyCRS(0, pockets.Values);
+                        port.Write(pockets.Values.CRSpaket, 0, SizeCRSpak);             //подтверждение корректного получения пакетов
                         ErrorPac = false;
-                        SaveDataInMatrix(PocCount, LengthData, pok);//сохранение в массив пакетов
+                        pockets.Values=SaveDataInMatrix(pockets.Values, pok,0);//сохранение в массив пакетов
                     }
                     else
                     {
-                        AssemblyCRS(1, SenderName, ReciverName);
-                        port.Write(CRSpaket, 0, 27);
+                        pockets.Values=AssemblyCRS(1, pockets.Values);
+                        port.Write(pockets.Values.CRSpaket, 0, SizeCRSpak);
                     }
                 }
                 if (colvoPacs > 1)//начало принятия остальных пакетов (если есть)
@@ -495,33 +509,26 @@ namespace ConsoleApp13
                         pok = new byte[sizemas];
                         port.Read(pok, 0, sizemas);
                         DeConvertDataOutPaket(pok);
-                        if (Name == namePaks)//проверка имени пришедшего пакета
+                        if (pockets.Values.Name == namePaks)//проверка имени пришедшего пакета
                         {
-                            checkONCRS = CheckCRS(Name, PocCount, PocNum, LengthData, DataType,SenderName,ReciverName, Data, CRS);//Проверка CRS
-                            if (checkONCRS == true) // сравнение суммы данных
+                            checkONCRS = CheckCRS(pockets.Values.Name, pockets.Values.PocCount, pockets.Values.PocNum, pockets.Values.LengthData, pockets.Values.DataType, pockets.Values.SenderName, pockets.Values.ReciverName, pockets.Values.Data, pockets.Values.CRS);//Проверка CRS
+                            if (checkONCRS)
                             {
-                                SaveDataInMatrix(PocCount, LengthData, pok); // сохранение данных в матрицу
-                                AssemblyCRS(0, SenderName, ReciverName);
-                                port.Write(CRSpaket,0,27); // оптравляет на другой конец порта 0, то что он расшифровал правильно пакет и готов дальше принимать 
+                                pockets.Values = AssemblyCRS(0, pockets.Values);
+                                port.Write(pockets.Values.CRSpaket, 0, SizeCRSpak);             //подтверждение корректного получения пакетов
+                                pockets.Values = SaveDataInMatrix(pockets.Values, pok,i);//сохранение в массив пакетов
                             }
                             else
                             {
+                                pockets.Values = AssemblyCRS(1, pockets.Values);
+                                port.Write(pockets.Values.CRSpaket, 0, SizeCRSpak);
                                 i--;
-                                AssemblyCRS(1, SenderName, ReciverName);
-                                port.Write(CRSpaket, 0, 27); // отправляет на другой конец порта 1 на пересылку этого пакета, так как суммы не совпадают 
                             }
                         }
                         else
                         {
                             i--; //не то имя пакета
                         }
-                    }
-                }
-                for (int i = 0; i < PocNum; i++)
-                {
-                    for (int j = 0; j > LengthData; j++)
-                    {
-                        pockets.Packet.DataRes[i, j] = DataRes[i, j];
                     }
                 }
                 return pockets; // Возврат отчета о ошибках
@@ -538,19 +545,19 @@ namespace ConsoleApp13
         /// Получение строки из массива пакетов
         /// </summary>
         /// <returns>Строка или ничего в случае ошибки</returns>
-        public string ConvertPaketsInString()//Конвертация даты в строку=====================================================================================================================
+        public string ConvertPaketsInString(Values val)//Конвертация даты в строку=====================================================================================================================
         {
             try
             {
                 string data = null;
-                PocNumDataSearch(DataRes); // находит кол-во пакетов в 0 пакете
-                for (int i = 0; i < PocNum; i++)
+                PocNumDataSearch(val.DataRes); // находит кол-во пакетов в 0 пакете
+                for (int i = 0; i < val.PocNum; i++)
                 {
-                    LengthDataSearch(DataRes, i); // находит размеры данных в каждом пакете
-                    byte[] array = new byte[LengthData]; // Создание массива для переписи данных из массива пакетов 
-                    for (int j = 24; j < array.Length + 24; j++)
+                    LengthDataSearch(val.DataRes, i); // находит размеры данных в каждом пакете
+                    byte[] array = new byte[val.LengthData]; // Создание массива для переписи данных из массива пакетов 
+                    for (int j = PointData; j < array.Length + PointData; j++)
                     {
-                        array[j - 24] = DataRes[i, j]; 
+                        array[j - PointData] = val.DataRes[i, j]; 
                     }
                     data += Encoding.UTF8.GetString(array); //конвертация данных пакета в строку и запись её в переменную
                 }
@@ -565,12 +572,12 @@ namespace ConsoleApp13
         /// поиск типа данных в пакете
         /// </summary>
         /// <returns>Возвращает номер типа данных, в случае ошибки возврашает номер данных типа Err</returns>
-        public int DataTypeSearch()//поиск типа данных в пакете
+        public int DataTypeSearch(Values val)//поиск типа данных в пакете
         {
             try
             {
                 byte[] fourArr = new byte[4];
-                for (int s = 0; s < 4; s++) { fourArr[s] = DataRes[0, s + 12]; }
+                for (int s = 0; s < 4; s++) { fourArr[s] = val.DataRes[0, s + PointDataType]; }
                 int datatype = BitConverter.ToInt32(fourArr, 0);
 
                 return datatype;
@@ -580,37 +587,34 @@ namespace ConsoleApp13
                 return 5;
             }
         }
-        private void AssemblyCRS(byte  Command, int SenderName, int ReciverName)
+        private Values AssemblyCRS( byte command,Values val)
         {
-            CRSpaket = new byte[27];
+            val.CRSpaket = new byte[SizeCRSpak];
 
-            int zero = 0;
-            int one = 1;
             ushort crs;
-            int datatype = 2;
-            byte[] arrName = Encoding.UTF8.GetBytes(Name);
-            byte[] arrPocCount = BitConverter.GetBytes(zero);
-            byte[] arrPocNum = BitConverter.GetBytes(one);
-            byte[] arrLenghtData = BitConverter.GetBytes(one);
-            byte[] arrDataType = BitConverter.GetBytes(datatype);
-            byte[] arrSenderName = BitConverter.GetBytes(SenderName);
-            byte[] arrReciverName = BitConverter.GetBytes(ReciverName);
+            byte[] arrName = Encoding.UTF8.GetBytes(val.Name);
+            byte[] arrPocCount = BitConverter.GetBytes(0);
+            byte[] arrPocNum = BitConverter.GetBytes(1);
+            byte[] arrLenghtData = BitConverter.GetBytes(1);
+            byte[] arrDataType = BitConverter.GetBytes((int)TypesContent.CRS);
+            byte[] arrSenderName = BitConverter.GetBytes(val.SenderName);
+            byte[] arrReciverName = BitConverter.GetBytes(val.ReciverName);
 
             byte[] arrData = new byte[1];
-            arrData[0] = Command;
+            arrData[0] = command;
 
             crs = SchetCRS(arrName, arrPocCount, arrPocNum, arrLenghtData, arrDataType, arrSenderName, arrReciverName, arrData);
             byte[] arrCRS = BitConverter.GetBytes(crs);
-            arrName.CopyTo(CRSpaket, 0);
-            arrPocCount.CopyTo(CRSpaket, 2);
-            arrPocNum.CopyTo(CRSpaket, 6);
-            arrLenghtData.CopyTo(CRSpaket, 10);
-            arrDataType.CopyTo(CRSpaket, 12);
-            arrSenderName.CopyTo(CRSpaket, 16);
-            arrReciverName.CopyTo(CRSpaket, 20);
-            arrData.CopyTo(CRSpaket, 24);
-            arrCRS.CopyTo(CRSpaket, arrData.Length+1);
-
+            arrName.CopyTo(val.CRSpaket, 0);
+            arrPocCount.CopyTo(val.CRSpaket, PointPocCount);
+            arrPocNum.CopyTo(val.CRSpaket, PointPocNum);
+            arrLenghtData.CopyTo(val.CRSpaket, PointLengthData);
+            arrDataType.CopyTo(val.CRSpaket, PointDataType);
+            arrSenderName.CopyTo(val.CRSpaket, PointSenderName);
+            arrReciverName.CopyTo(val.CRSpaket, PointReciverName);
+            arrData.CopyTo(val.CRSpaket, PointData);
+            arrCRS.CopyTo(val.CRSpaket, arrData.Length+PointData);
+            return val;
         }
         private string CRSNameSearch(byte[] pakCRS)
         {
